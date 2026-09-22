@@ -8,6 +8,9 @@ import numpy as np
 from scipy.signal import firwin, freqz
 from scitex_decorators import numpy_fn
 from scitex_math import to_even
+import scitex_logging as slogging
+
+log = slogging.getLogger(__name__)
 
 
 @numpy_fn
@@ -103,7 +106,7 @@ def design_filter(sig_len, fs, low_hz=None, high_hz=None, cycle=3, is_bandstop=F
             scale=True,
         )
     except Exception as e:
-        print(e)
+        log.error(e)
         raise
 
     return h

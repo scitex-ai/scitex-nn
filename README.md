@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://scitex.ai">
-    <img src="docs/assets/images/scitex-logo-blue-cropped.png" alt="SciTeX NN" width="400">
+    <img src="docs/scitex-logo-blue-cropped.png" alt="SciTeX NN" width="400">
   </a>
 </p>
 
@@ -14,12 +14,14 @@
 
 <!-- scitex-badges:start -->
 <p align="center">
-  <a href="https://pypi.org/project/scitex-nn/"><img src="https://img.shields.io/pypi/v/scitex-nn.svg" alt="PyPI"></a>
-  <a href="https://pypi.org/project/scitex-nn/"><img src="https://img.shields.io/pypi/pyversions/scitex-nn.svg" alt="Python"></a>
-  <a href="https://github.com/ywatanabe1989/scitex-nn/actions/workflows/test.yml"><img src="https://github.com/ywatanabe1989/scitex-nn/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
-  <a href="https://codecov.io/gh/ywatanabe1989/scitex-nn"><img src="https://codecov.io/gh/ywatanabe1989/scitex-nn/graph/badge.svg" alt="Coverage"></a>
-  <a href="https://scitex-nn.readthedocs.io/en/latest/"><img src="https://readthedocs.org/projects/scitex-nn/badge/?version=latest" alt="Docs"></a>
-  <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/license-AGPL_v3-blue.svg" alt="License: AGPL v3"></a>
+  <a href="https://pypi.org/project/scitex-nn/"><img src="https://img.shields.io/pypi/v/scitex-nn?label=pypi" alt="pypi"></a>
+  <a href="https://pypi.org/project/scitex-nn/"><img src="https://img.shields.io/pypi/pyversions/scitex-nn?label=python" alt="python"></a>
+  <a href="https://scitex-nn.readthedocs.io/"><img src="https://img.shields.io/readthedocs/scitex-nn?label=docs" alt="docs"></a>
+  <a href="https://github.com/ywatanabe1989/scitex-nn/actions/workflows/rtd-sphinx-build-on-ubuntu-latest.yml"><img src="https://img.shields.io/github/actions/workflow/status/ywatanabe1989/scitex-nn/rtd-sphinx-build-on-ubuntu-latest.yml?branch=develop&label=docs" alt="docs"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/ywatanabe1989/scitex-nn/actions/workflows/pr-ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ywatanabe1989/scitex-nn/pr-ci.yml?branch=develop&label=tests" alt="tests"></a>
+  <a href="https://codecov.io/gh/ywatanabe1989/scitex-nn"><img src="https://img.shields.io/codecov/c/github/ywatanabe1989/scitex-nn/develop?label=cov" alt="cov"></a>
 </p>
 <!-- scitex-badges:end -->
 
@@ -29,17 +31,90 @@
 
 | # | Problem | Solution |
 |---|---------|----------|
-| 1 | **Signal-processing layers are scattered** across research codebases — Hilbert, PAC, Wavelet, bandpass filters | **Drop-in PyTorch modules** — differentiable, batched, and composable into any `nn.Module` |
-| 2 | **Standard `nn.Dropout` operates element-wise** — no axis-wise option for channel/feature drop | **`AxiswiseDropout`, `DropoutChannels`** — zero out entire features along a chosen axis |
-| 3 | **Custom blocks (BNet, MNet, ResNet1D)** must be re-implemented for every project | **Vetted reference implementations** with consistent APIs and shape conventions |
+| 1 | Signal-processing layers (Hilbert, PAC, Wavelet, bandpass filters) are **scattered** across research codebases | **Drop-in** PyTorch modules — differentiable, batched, composable into any `nn.Module` |
+| 2 | Standard `nn.Dropout` is **element-wise only** — no axis-wise option for channel/feature drop | `AxiswiseDropout` / `DropoutChannels` zero out **entire features** along a chosen axis |
+| 3 | Custom blocks (BNet, MNet, ResNet1D) must be **re-implemented** for every project | Vetted reference implementations with **consistent APIs** and shape conventions |
+
+## Demo
+
+The shortest end-to-end demo: differentiable Hilbert envelope on a
+multi-channel signal, axis-wise dropout for SSL pre-training.
+
+```python
+import torch
+import scitex_nn
+
+x = torch.randn(8, 19, 1024)              # (batch, channels, samples)
+
+env = scitex_nn.Hilbert(seq_len=1024)(x)  # analytic signal: (..., 2)
+phase, amplitude = env[..., 0], env[..., 1]
+
+drop = scitex_nn.AxiswiseDropout(dropout_prob=0.5, dim=1).train()
+y = drop(x)                               # whole channels zeroed
+```
+
+```mermaid
+flowchart LR
+    raw["raw signal<br/>(B, C, T)"]
+    aug["aug<br/>(DropoutChannels,<br/>FreqGainChanger,<br/>...)"]
+    filt["filter<br/>(BandPassFilter,<br/>GaussianFilter,<br/>...)"]
+    spec["spectral<br/>(Hilbert,<br/>Spectrogram,<br/>Wavelet, PSD)"]
+    coup["coupling<br/>(ModulationIndex,<br/>PAC)"]
+    arch["architecture<br/>(ResNet1D,<br/>MNet1000, BNet)"]
+    raw --> aug --> filt --> spec --> coup
+    raw --> arch
+    spec --> arch
+```
+
+<p align="center"><sub><b>Figure 1.</b> Signal flow through scitex-nn: raw multi-channel tensors pass augmentation, filtering, and spectral stages before coupling analysis or classification architectures.</sub></p>
+
+For tutorial-style runnable examples covering every public class,
+see the [Gallery](#gallery) below — each is a self-contained
+`examples/<NN>_*.ipynb` whose cell outputs render inline on GitHub.
+`examples/00_run_all.sh` re-executes every notebook in place.
 
 ## Installation
 
+```bash
+uv pip install "scitex-nn[all]"
+```
+
 Requires Python >= 3.9.
 
+<details>
+<summary><b>Per-module extras</b></summary>
+
+<br>
+
+| Extra | Pulls in |
+|---|---|
+| `all` | `dev` + `docs` (recommended) |
+| `dev` | pytest, ruff, joblib, flask, ipdb + scitex-dev (contributors) |
+| `docs` | Sphinx + RTD theme + myst-parser (docs build only) |
+
 ```bash
-pip install scitex-nn
+uv pip install -e ".[dev]"   # editable install for contributors
 ```
+
+</details>
+
+## Architecture
+
+`scitex-nn` is a flat collection of `nn.Module`s grouped by what they do
+to a `(batch, channels, samples)` tensor:
+
+```mermaid
+flowchart TD
+    pkg["scitex_nn"]
+    pkg --> augm["augmentation<br/>_AxiswiseDropout, _DropoutChannels,<br/>_SwapChannels, _ChannelGainChanger,<br/>_FreqGainChanger"]
+    pkg --> filt["filters<br/>_Filters, _GaussianFilter,<br/>_vendor_dsp_utils"]
+    pkg --> spec["spectral<br/>_Hilbert, _PSD,<br/>_Spectrogram, _Wavelet"]
+    pkg --> coup["coupling<br/>_ModulationIndex, _PAC"]
+    pkg --> arch["architectures<br/>_ResNet1D, _MNet_1000,<br/>_BNet, _BNet_Res"]
+    pkg --> util["utilities<br/>_SpatialAttention,<br/>_TransposeLayer"]
+```
+
+<p align="center"><sub><b>Figure 2.</b> Module groups in scitex-nn. Every group operates on ordinary torch tensors, so layers compose as plain <code>nn.Sequential</code>: signal-processing layers on the last (time) axis, channel-aware augmentations on <code>dim=1</code>.</sub></p>
 
 ## 2 Interfaces
 
@@ -96,6 +171,8 @@ every figure renders inline on GitHub. Ordered simple → complex.
 | 15 | [`examples/15_mnet1000.ipynb`](examples/15_mnet1000.ipynb) | `MNet1000` forward + backward + per-parameter gradient norms |
 | 16 | [`examples/16_bnet.ipynb`](examples/16_bnet.ipynb) | `BNet_v1` 2-modality forward + per-submodule parameter distribution |
 
+<p align="center"><sub><b>Table 1.</b> Gallery notebooks, ordered simple to complex. Every notebook is self-contained with baked-in cell outputs.</sub></p>
+
 <details>
 <summary><strong>Skills — for AI Agent Discovery</strong></summary>
 
@@ -109,73 +186,6 @@ scitex-dev skills export --package scitex-nn  # Export to Claude Code
 
 </details>
 
-## Demo
-
-The shortest end-to-end demo: differentiable Hilbert envelope on a
-multi-channel signal, axis-wise dropout for SSL pre-training.
-
-```python
-import torch
-import scitex_nn
-
-x = torch.randn(8, 19, 1024)              # (batch, channels, samples)
-
-env = scitex_nn.Hilbert(seq_len=1024)(x)  # analytic signal: (..., 2)
-phase, amplitude = env[..., 0], env[..., 1]
-
-drop = scitex_nn.AxiswiseDropout(dropout_prob=0.5, dim=1).train()
-y = drop(x)                               # whole channels zeroed
-```
-
-```mermaid
-flowchart LR
-    raw["raw signal<br/>(B, C, T)"]
-    aug["aug<br/>(DropoutChannels,<br/>FreqGainChanger,<br/>...)"]
-    filt["filter<br/>(BandPassFilter,<br/>GaussianFilter,<br/>...)"]
-    spec["spectral<br/>(Hilbert,<br/>Spectrogram,<br/>Wavelet, PSD)"]
-    coup["coupling<br/>(ModulationIndex,<br/>PAC)"]
-    arch["architecture<br/>(ResNet1D,<br/>MNet1000, BNet)"]
-    raw --> aug --> filt --> spec --> coup
-    raw --> arch
-    spec --> arch
-```
-
-For tutorial-style runnable examples covering every public class,
-see the [Gallery](#gallery) below — each is a self-contained
-`examples/<NN>_*.ipynb` whose cell outputs render inline on GitHub.
-`examples/00_run_all.sh` re-executes every notebook in place.
-
-## Architecture
-
-`scitex-nn` is a flat collection of `nn.Module`s grouped by what they do
-to a `(batch, channels, samples)` tensor:
-
-```
-scitex_nn/
-├── _Filters.py            # FIR-init bandpass / lowpass / highpass / bandstop
-├── _GaussianFilter.py     # Gaussian smoothing (kernel = 6·sigma)
-├── _Hilbert.py            # analytic-signal extraction (FFT-based)
-├── _PSD.py                # power spectral density
-├── _Spectrogram.py        # STFT magnitude per channel
-├── _Wavelet.py            # Morlet CWT
-├── _ModulationIndex.py    # Tort 2010 KL-MI
-├── _PAC.py                # phase-amplitude coupling pipeline
-├── _AxiswiseDropout.py    # axis-wise dropout (channel / time / feature)
-├── _DropoutChannels.py    # whole-channel dropout
-├── _ChannelGainChanger.py # softmax-weighted per-channel gain
-├── _FreqGainChanger.py    # softmax-weighted per-band gain (julius)
-├── _SwapChannels.py       # random channel permutation
-├── _SpatialAttention.py   # 1×1 conv channel attention
-├── _ResNet1D.py           # 1D ResNet backbone
-├── _MNet_1000.py          # 4-stage Conv2d EEG/MEG classifier
-├── _BNet.py / _BNet_Res.py# B-shaped multi-modality wrapper
-└── _vendor_dsp_utils/     # vendored helpers (no scitex-dsp dep)
-```
-
-Modules compose as ordinary `nn.Sequential`. The signal-processing
-layers operate on the last (time) axis; channel-aware augmentations
-operate on `dim=1`.
-
 ## Available Modules
 
 | Category | Modules |
@@ -186,6 +196,8 @@ operate on `dim=1`.
 | **Augmentation** | `ChannelGainChanger`, `FreqGainChanger`, `SwapChannels` |
 | **Architectures** | `BNet`, `BNet_Res`, `MNet_1000`, `ResNet1D` |
 | **Utilities** | `SpatialAttention`, `TransposeLayer` |
+
+<p align="center"><sub><b>Table 2.</b> Public modules by category. See the Gallery notebooks for runnable examples of each.</sub></p>
 
 ## Part of SciTeX
 
@@ -219,7 +231,7 @@ The SciTeX system follows the Four Freedoms for Research below, inspired by [the
 ---
 
 <p align="center">
-  <a href="https://scitex.ai" target="_blank"><img src="docs/assets/images/scitex-icon-navy-inverted.png" alt="SciTeX" width="40"/></a>
+  <a href="https://scitex.ai" target="_blank"><img src="docs/scitex-icon-navy-inverted.png" alt="SciTeX" width="40"/></a>
 </p>
 
 <!-- EOF -->

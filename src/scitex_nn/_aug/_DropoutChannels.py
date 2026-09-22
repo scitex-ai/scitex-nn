@@ -10,6 +10,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchsummary import summary
 
+import scitex_logging as slogging
+
+log = slogging.getLogger(__name__)
+
 import scitex_nn
 
 
@@ -44,7 +48,7 @@ if __name__ == "__main__":
     x = torch.rand(bs, n_chs, seq_len)
 
     dc = DropoutChannels(dropout=0.1)
-    print(dc(x).shape)  # [16, 19, 1000]
+    log.info(dc(x).shape)  # [16, 19, 1000]
 
     # sb = SubjectBlock(n_chs=n_chs)
     # print(sb(x, s).shape) # [16, 270, 1000]

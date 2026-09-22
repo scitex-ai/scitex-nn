@@ -1,5 +1,29 @@
 name: CLA Assistant
 
+# Thin caller. The body lives ONCE, org-side, in scitex-ai/.github@main.
+# Converted from a local fork per PS-231 (audit-all green run). Side benefit:
+# the fork hardcoded the CLA doc URL to the pre-org `ywatanabe1989/scitex-nn`
+# path (stale since the scitex-ai move); the reusable derives the URL from
+# `github.repository`, so the migration fixes that link too.
+#
+# REQUIRED-CONTEXT CHECK (PS-231 blocker 1), verified before converting:
+# `gh api repos/scitex-ai/scitex-nn/branches/{develop,main}/protection`
+# requires ONLY `pytest-matrix-on-ubuntu-py3.{11,12,13}`. This workflow
+# publishes no required context, so the job rename (`CLAssistant` -> `call`)
+# cannot wedge branch protection on either branch.
+#
+# RUNNER PLACEMENT IS A SECURITY DECISION HERE, not bookkeeping. This job is
+# outsider-triggerable (`issue_comment` / `pull_request_target` are
+# unauthenticated on a public repo and are NOT covered by the fork-PR approval
+# gate) and runs third-party code. It MUST stay on an ephemeral GitHub-hosted
+# runner: persistent self-hosted runners share a $HOME holding the live fleet
+# credential, so repointing would let any stranger execute third-party code
+# next to that credential by commenting on an issue. `runs_on` is passed
+# explicitly below rather than inherited from the callee default, because a
+# security-relevant destination must be a decision with an author, not a
+# default nobody here reviews. Recorded per PS-224 as a job-scoped exemption
+# in `.scitex/dev/config.yaml` (path `.github/workflows/cla.yml::call`).
+
 on:
   issue_comment:
     types: [created]
@@ -13,21 +37,11 @@ permissions:
   statuses: write
 
 jobs:
-  CLAssistant:
-    runs-on: ubuntu-latest
-    steps:
-      - name: CLA Assistant
-        uses: contributor-assistant/github-action@v2.6.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-        with:
-          path-to-signatures: "signatures/cla.json"
-          path-to-document: "https://github.com/ywatanabe1989/scitex-nn/blob/main/CLA.md"
-          branch: "cla-signatures"
-          allowlist: bot*,ywatanabe1989
-          custom-allsigned-prcomment: |
-            Thank you for signing the SciTeX CLA. Your contribution can now be reviewed.
-          custom-notsigned-prcomment: |
-            Please sign the [SciTeX CLA](https://github.com/ywatanabe1989/scitex-nn/blob/main/CLA.md) before your contribution can be merged.
-            Comment `I have read and agree to the SciTeX CLA.` to sign.
+  call:
+    uses: scitex-ai/.github/.github/workflows/cla.yml@main
+    with:
+      owner_allowlist: "bot*,ywatanabe1989"
+      # JSON array STRING — consumed by fromJSON in the callee. A YAML list
+      # decodes to something fromJSON rejects and the job queues forever.
+      runs_on: '["ubuntu-latest"]'
+    secrets: inherit
