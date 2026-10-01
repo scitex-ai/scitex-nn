@@ -1,49 +1,32 @@
 name: auto-merge-to-develop
-# Merge green PRs that TARGET develop, the moment their checks complete.
-# GitHub reads check_suite-triggered workflows from the DEFAULT branch (main),
-# so this file lives on main but acts ONLY on PRs whose base is develop.
-# codecov + readthedocs checks are ignored (advisory). Fail-safe: if a merge
-# is blocked by branch policy the PR simply stays open.
+
+# Thin caller. The body lives ONCE, org-side, in scitex-ai/.github@main.
+# Converted from a local fork per PS-231 (audit-all green run): a local copy
+# does not track upstream fixes — e.g. the org copy already contains the
+# "QUEUED checks counted as green" fix our fork lacked (a CheckRun that has
+# not finished has `conclusion: null` and no `.state`, so our naive
+# `(.conclusion // .state // "")` counted all-queued PRs as passing).
+#
+# REQUIRED-CONTEXT CHECK (PS-231 blocker 1), verified before converting:
+# `gh api repos/scitex-ai/scitex-nn/branches/{develop,main}/protection`
+# requires ONLY `pytest-matrix-on-ubuntu-py3.{11,12,13}`. This workflow
+# publishes no required context, so the job rename (`automerge` ->
+# `auto-merge-to-develop`) cannot wedge branch protection on either branch.
+#
+# `runs_on` is passed explicitly rather than inherited: a destination with a
+# security property must not ride someone else's default, which can change
+# upstream by a review nobody here sees.
+
 on:
   check_suite:
     types: [completed]
   workflow_dispatch: {}
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
-  automerge:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.check_suite.conclusion == 'success' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: merge green PRs targeting develop
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.check_suite.head_sha }}
-        run: |
-          set -uo pipefail
-          if [ -n "${HEAD_SHA:-}" ]; then
-            prs=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" --jq '.[] | select(.state=="open") | .number' 2>/dev/null || true)
-          else
-            prs=$(gh pr list --repo "$REPO" --base develop --state open --json number --jq '.[].number' 2>/dev/null || true)
-          fi
-          [ -z "${prs:-}" ] && { echo "no open PRs"; exit 0; }
-          for pr in $prs; do
-            base=$(gh pr view "$pr" --repo "$REPO" --json baseRefName --jq .baseRefName 2>/dev/null || echo "")
-            [ "$base" = "develop" ] || { echo "skip #$pr (base=$base, not develop)"; continue; }
-            draft=$(gh pr view "$pr" --repo "$REPO" --json isDraft --jq .isDraft 2>/dev/null || echo true)
-            [ "$draft" = "true" ] && continue
-            pending=$(gh pr view "$pr" --repo "$REPO" --json statusCheckRollup --jq '
-              [ .statusCheckRollup[]
-                | select(((.name // .context // "") | ascii_downcase | test("codecov|readthedocs")) | not)
-                | (.conclusion // .state // "")
-                | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED" and . != "") ] | length' 2>/dev/null || echo 1)
-            if [ "$pending" = "0" ]; then
-              gh pr merge "$pr" --repo "$REPO" --merge --admin --delete-branch && echo "MERGED #$pr -> develop" || echo "blocked #$pr"
-            else
-              echo "PR #$pr not green ($pending) — skip"
-            fi
-          done
+  auto-merge-to-develop:
+    uses: scitex-ai/.github/.github/workflows/auto-merge-to-develop.yml@main
+    with:
+      # JSON array STRING — consumed by fromJSON in the callee. A YAML list
+      # decodes to something fromJSON rejects and the job queues forever.
+      runs_on: '["ubuntu-latest"]'
+    secrets: inherit

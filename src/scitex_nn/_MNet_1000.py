@@ -10,6 +10,9 @@ import torch.nn.functional as F
 from torchsummary import summary
 
 import scitex_nn
+import scitex_logging as slogging
+
+log = slogging.getLogger(__name__)
 
 MNet_config = {
     "classes": ["class1", "class2"],
@@ -152,7 +155,7 @@ if __name__ == "__main__":
 
     y = model(x)
     summary(model, x)
-    print(y.shape)
+    log.info(y.shape)
 
 # Backward compatibility
 MNet_1000 = MNet1000  # Deprecated: use MNet1000 instead

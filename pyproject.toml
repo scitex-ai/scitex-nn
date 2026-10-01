@@ -25,11 +25,12 @@ dependencies = [
     "torchaudio",
     "torchsummary",
     "julius",
-    # `scipy` dropped from core in 2026-06-13 hard-dep-overreach sweep.
-    # `rg "^(import|from)\s+scipy\b" src/` finds zero imports across
-    # the 26 scitex_nn source files. CI-as-gate (a2a 582a39fb) catches
-    # any lazy / re-export path that needs scipy at import time. See
-    # scitex-dev a2a directive da6bcfb8.
+    # `scipy` is a hard runtime dep: `src/scitex_nn/_Filters.py` imports
+    # `design_filter` from `_vendor_dsp_utils/filter.py`, whose module-level
+    # `from scipy.signal import firwin, freqz` executes on that path. The
+    # 2026-06-13 sweep comment claiming zero scipy imports is stale (the
+    # vendored filter module postdates it); audit PS-233 confirms the import.
+    "scipy",
     "xarray",
     "scitex-decorators>=0.1.1",
     "scitex-config>=0.3.0",
@@ -39,6 +40,9 @@ dependencies = [
     # _vendor_dsp_utils/* — without this pin bare `pip install scitex-nn`
     # followed by `import scitex_nn._Wavelet` raises ImportError.
     "scitex-math>=0.1.0",
+    # Declared because package source logs via scitex-logging (PS-220):
+    # several modules call `slogging.getLogger(__name__)` at import time.
+    "scitex-logging",
 ]
 
 [project.optional-dependencies]
@@ -79,6 +83,13 @@ scitex-nn = "scitex_nn"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--disable-warnings"]
+markers = [
+    "e2e: slow end-to-end workflows against real subsystems (RUN_E2E=1 to run)",
+]
+
+[tool.scitex_dev]
+# No CLI surface (no console entry points): smoke layer does not apply (PS-211).
+no_cli = true
 
 [tool.coverage.run]
 parallel = true
